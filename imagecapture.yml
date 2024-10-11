@@ -1,0 +1,21 @@
+name: ImageCapture
+# requires: StashUserscriptLibrary
+description: Capture image from scene.
+version: 0.0.3
+ui:
+  javascript:
+    - https://cdn.jsdelivr.net/npm/jquery@1.11.1/dist/jquery.min.js
+    - js/stashUserscriptLibrary.js
+    - js/imagecapture.js
+exec:
+  - python
+  - "{pluginDir}/python/imagecapture.py"
+interface: raw
+tasks:
+  - name: Capture Frame
+    description: Captures and saves a frame from a video
+    defaultArgs:
+      name: captureFrame
+      mode: captureFrame
+      scene_id: null
+      frame_idx: null
