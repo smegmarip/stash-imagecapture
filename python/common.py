@@ -7,11 +7,8 @@ import os
 import sys
 import json
 import warnings
-from urllib.parse import urlparse
-from datetime import datetime
-from pathlib import Path
-from typing import Any, List, Tuple
-from glob import glob
+import shutil
+from typing import List
 
 try:
     import stashapi.log as log
@@ -72,19 +69,14 @@ def stash_log(*args, **kwargs):
     message = " ".join(messages)
 
     if lvl == "trace":
-        log.LEVEL = log.StashLogLevel.TRACE
         log.trace(message)
     elif lvl == "debug":
-        log.LEVEL = log.StashLogLevel.DEBUG
         log.debug(message)
     elif lvl == "info":
-        log.LEVEL = log.StashLogLevel.INFO
         log.info(message)
     elif lvl == "warn":
-        log.LEVEL = log.StashLogLevel.WARNING
         log.warning(message)
     elif lvl == "error":
-        log.LEVEL = log.StashLogLevel.ERROR
         log.error(message)
     elif lvl == "result":
         log.result(message)
@@ -94,7 +86,6 @@ def stash_log(*args, **kwargs):
             log.progress(str(progress))
         except:
             pass
-    log.LEVEL = log.StashLogLevel.INFO
 
 
 def default_json(t):
