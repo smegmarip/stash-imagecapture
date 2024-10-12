@@ -18,9 +18,8 @@ _Note_: StashUserscriptLibrary has been deprecated and removed. This plugin uses
 ### Installing
 
 1. Clone and copy the `stash-imagecapture` folder to the `config/plugins` directory.
-2. Run `sudo apt-get install python3-opencv` on debian distros or the equivalent for your OS.
-3. Run `pip install -r requirements.txt` inside the `stash-imagecapture/python` folder.
-4. Optionally, for file-based logging, create a `config.py` file inside the `python` folder and copy the contents of `imagecapture_defaults.py`. Change the `stash_logfile` value to the path of your log file.
+2. Run `pip install -r requirements.txt` inside the `stash-imagecapture/python` folder.
+3. Optionally, for file-based logging, create or edit `config.py` inside the `python` folder and copy the contents of `imagecapture_defaults.py`. Change the `stash_logfile` value to the path of your log file.
 
 ### Running the plugin
 
