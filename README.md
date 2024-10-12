@@ -41,7 +41,11 @@ Smegmarip
 ## Version History
 
 - 0.0.3
+
   - Initial Release
+
+- 0.0.4
+  - Replace opencv method with ffmpeg
 
 ## License
 
