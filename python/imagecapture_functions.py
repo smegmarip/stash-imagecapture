@@ -8,14 +8,12 @@ from pathlib import Path
 import re
 import sys
 import traceback
-
-import cv2
-import ffmpeg
-import numpy as np
+import subprocess
 
 from common import (
     extract_image_metadata,
     extract_scene_metadata,
+    is_ffmpeg_installed,
     search_images_by_prefix,
     stash_log,
     the_id,
@@ -23,7 +21,6 @@ from common import (
 )
 
 try:
-    import stashapi.log as log
     from stashapi.stashapp import StashInterface
 except ModuleNotFoundError:
     print(
@@ -53,129 +50,93 @@ def capture_frame(stash: StashInterface, scene_id: int, frame_idx: int) -> dict:
         scene_data = extract_scene_metadata(scene)
 
         if scene_data:
-            scene_folder = scene_data["folderpath"] + "/"
             scene_path = str(scene_data["path"])
             capture_filename = generate_image_filename(stash, scene_path)
             result = extract_frame(scene_data, int(frame_idx), capture_filename)
 
             if result:
                 result = capture_filename
+                # scene_folder = scene_data["folderpath"] + "/"
                 # scan_library(stash, scene_folder)
     return {"result": result}
 
 
 def extract_frame(scene_data: dict, frame_index: int, output_image_path: str) -> bool:
     """
-    Extract a single frame from a video and save it.
+    Extract a single frame from a video using ffmpeg and save it.
 
     :param scene_data: dict: Scene
     :param frame_index: int: Frame index
     :param output_image_path: str: Output image path
     :return: bool: Success
     """
+    if not is_ffmpeg_installed():
+        stash_log("ffmpeg could not be found", lvl="error")
+        return False
+
     video_path = scene_data["path"]
     stash_log(
         {"video_path": video_path, "frame_index": frame_index, "output_image_path": output_image_path}, lvl="trace"
     )
     outcome = False
 
-    # Get the video orientation
-    orientation = get_rotation(video_path)
-    stash_log(f"Video orientation: {orientation}", lvl="debug")
+    # Get the frame rate to calculate the timestamp for the frame
+    try:
+        # Get video frame rate using ffprobe
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+        frame_rate_str = subprocess.check_output(command).decode("utf-8").strip()
+        num, denom = map(int, frame_rate_str.split("/"))
+        frame_rate = num / denom
+        stash_log(f"Frame rate: {frame_rate} fps", lvl="debug")
+    except Exception as e:
+        stash_log(f"Error getting frame rate: {e}", lvl="error")
+        return outcome
 
-    # Open the video file
-    video_capture = cv2.VideoCapture(video_path)
+    # Calculate the timestamp for the desired frame
+    timestamp = frame_index / frame_rate
+    stash_log(f"Timestamp for frame {frame_index}: {timestamp} seconds", lvl="debug")
 
-    # Set the frame position
-    video_capture.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+    # Build ffmpeg command to extract the frame
+    ffmpeg_command = [
+        "ffmpeg",
+        "-loglevel",
+        "fatal",
+        "-i",
+        video_path,
+        "-vf",
+        f"select=eq(n\,{frame_index})",
+        "-vsync",
+        "vfr",
+        "-frames:v",
+        "1",
+        output_image_path,
+        "-y",
+    ]
 
     try:
-        # Read the frame
-        success, frame = video_capture.read()
-
-        # Correct the frame size
-        frame = normalize_frame_rotation(frame, orientation)
-
-        if success:
-            # Save the extracted frame as an image
-            cv2.imwrite(output_image_path, frame)
-            stash_log(f"Frame {frame_index} saved to {output_image_path}", lvl="debug")
-            outcome = True
-        else:
-            stash_log(f"Failed to extract frame {frame_index}", lvl="error")
+        # Execute ffmpeg command
+        subprocess.run(ffmpeg_command, check=True)
+        stash_log(f"Frame {frame_index} saved to {output_image_path}", lvl="debug")
+        outcome = True
+    except subprocess.CalledProcessError as e:
+        stash_log(f"ffmpeg error: {e}", lvl="error")
     except Exception as exp:
         stash_log(f"Failed to extract frame {frame_index}", lvl="error")
         stash_log(exp, lvl="error")
         stash_log(traceback.format_exc(), lvl="trace")
 
-    # Release the video capture object
-    video_capture.release()
     return outcome
-
-
-def get_rotation(video_file_path: str):
-    """
-    The get_rotation function is used to extract the rotation information from a video file.
-    The function takes the following parameters:
-        video_file_path: str: The path to the video file
-
-    :return: The rotation information
-    """
-    try:
-        # fetch video metadata
-        metadata = ffmpeg.probe(video_file_path)
-    except Exception as e:
-        stash_log(e, lvl="error")
-        stash_log(f"failed to read video: {video_file_path}\n", lvl="error")
-        stash_log(traceback.format_exc(), lvl="trace")
-        return None
-    # extract rotate info from metadata
-    video_stream = next((stream for stream in metadata["streams"] if stream["codec_type"] == "video"), None)
-    rotation = int(video_stream.get("tags", {}).get("rotate", 0))
-    # extract rotation info from side_data_list, popular for Iphones
-    if len(video_stream.get("side_data_list", [])) != 0:
-        side_data = next(iter(video_stream.get("side_data_list")))
-        side_data_rotation = int(side_data.get("rotation", 0))
-        if side_data_rotation != 0:
-            rotation -= side_data_rotation
-
-    # If no rotation data is found, infer from display aspect ratio (DAR)
-    if rotation == 0:
-        dar = video_stream.get("display_aspect_ratio")
-        if dar:
-            width, height = map(int, dar.split(":"))
-            if width > height:
-                rotation = 0  # Assume landscape
-            elif width < height:
-                rotation = 90  # Assume portrait
-            else:
-                rotation = 0  # Square video, no rotation inferred
-
-    return rotation
-
-
-def normalize_frame_rotation(frame: np.ndarray, rotation: int):
-    """
-    The normalize_frame_rotation function is used to normalize the rotation of a frame.
-    The function takes the following parameters:
-        frame: np.ndarray: The frame to normalize
-        rotation: int: The rotation information
-
-    :return: The normalized frame
-    """
-    width = frame.shape[1]
-    height = frame.shape[0]
-    frame_orientation = "portrait" if height > width else "landscape"
-    stash_log(f"Frame orientation: {frame_orientation}", lvl="debug")
-    if frame_orientation == "landscape":
-        if rotation == 90 or rotation == 270:
-            frame = cv2.resize(frame, (height, width))
-            stash_log(f"Frame resized to {height}x{width}", lvl="debug")
-    elif frame_orientation == "portrait":
-        if rotation == 0 or rotation == 180:
-            frame = cv2.resize(frame, (height, width))
-            stash_log(f"Frame resized to {height}x{width}", lvl="debug")
-    return frame
 
 
 def generate_image_filename(stash: StashInterface, scene_path: str) -> str:

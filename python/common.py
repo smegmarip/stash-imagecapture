@@ -160,6 +160,21 @@ def clear_logfile():
             pass
 
 
+def is_ffmpeg_installed() -> bool:
+    """
+    Check if ffmpeg is installed and available in the system's PATH.
+
+    :return: bool: True if ffmpeg is found, False otherwise.
+    """
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        stash_log(f"ffmpeg found at: {ffmpeg_path}", lvl="debug")
+        return True
+    else:
+        stash_log("ffmpeg not found in the system PATH.", lvl="error")
+        return False
+
+
 def to_integer(iter=[]):
     """
     The to_integer function is used to convert a list of strings to a list of integers.
