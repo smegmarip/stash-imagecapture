@@ -1,7 +1,7 @@
 name: ImageCapture
 # requires: StashUserscriptLibrary
 description: Capture image from scene.
-version: 0.0.3
+version: 0.0.4
 ui:
   javascript:
     - https://cdn.jsdelivr.net/npm/jquery@1.11.1/dist/jquery.min.js
